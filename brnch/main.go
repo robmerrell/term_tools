@@ -3,11 +3,20 @@ package main
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	tint "github.com/lrstanley/bubbletint"
+)
+
+type inputMode int
+
+const (
+	normalMode inputMode = iota
+	insertMode
 )
 
 type listItem struct {
@@ -16,8 +25,12 @@ type listItem struct {
 	// just store if this is a level 1 or level 2 task. Since we only allow 2 levels
 	// this is easier than having a list of subitem structs. Moving around fully grouped
 	// tasks is a little more work, but not significantly so.
-	// TODO: make this an "enum"
 	level int
+	order int
+}
+
+func newTask(text string, cursor int) *listItem {
+	return &listItem{checked: false, level: 1, task: text, order: cursor}
 }
 
 func (l *listItem) render(m *model, selected bool) string {
@@ -58,73 +71,106 @@ func (l *listItem) render(m *model, selected bool) string {
 }
 
 type model struct {
-	list   []*listItem
-	cursor int
-	width  int
-	height int
+	list      []*listItem
+	taskinput textinput.Model
+	cursor    int
+	width     int
+	height    int
+	mode      inputMode
 }
 
 func (m model) Init() tea.Cmd {
-	// Just return `nil`, which means "no I/O right now, please."
 	return nil
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
+	var cmd tea.Cmd
 
+	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.taskinput.Width = msg.Width
 
 	case tea.KeyMsg:
-		// Cool, what was the actual key pressed?
-		switch msg.String() {
-
-		// These keys should exit the program.
-		case "ctrl+c", "q":
+		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
+		}
 
-		// move the cursor up
-		case "k":
-			if m.cursor > 0 {
-				m.cursor--
+		if m.mode == normalMode {
+			switch msg.String() {
+			// move the cursor up
+			case "k":
+				if m.cursor > 0 {
+					m.cursor--
+				}
+
+			// move the cursor down
+			case "j":
+				if m.cursor < len(m.list)-1 {
+					m.cursor++
+				}
+
+			// move the task down
+			case "J":
+				if m.cursor < len(m.list)-1 {
+					m.list[m.cursor], m.list[m.cursor+1] = m.list[m.cursor+1], m.list[m.cursor]
+					m.cursor++
+				}
+
+			// move the task up
+			case "K":
+				if m.cursor > 0 {
+					m.list[m.cursor], m.list[m.cursor-1] = m.list[m.cursor-1], m.list[m.cursor]
+					m.cursor--
+				}
+
+			// bump the task level left
+			case "H":
+				m.list[m.cursor].level = 1
+
+			// bump the task level right
+			case "L":
+				m.list[m.cursor].level = 2
+
+			// focus task creation
+			case "i":
+				m.mode = insertMode
+				cmd = m.taskinput.Focus()
+
+			// delete
+			case "d":
+				if len(m.list) > 0 {
+					m.list = slices.Delete(m.list, m.cursor, m.cursor+1)
+					if m.cursor > len(m.list)-1 {
+						m.cursor--
+					}
+				}
+
+			// toggle selection
+			case " ":
+				m.list[m.cursor].checked = !m.list[m.cursor].checked
 			}
+		} else {
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.mode = normalMode
+				m.taskinput.Blur()
+				m.taskinput.Reset()
 
-		// move the cursor down
-		case "j":
-			if m.cursor < len(m.list)-1 {
+			case tea.KeyEnter:
+				m.mode = normalMode
 				m.cursor++
+				task := newTask(m.taskinput.Value(), m.cursor)
+				m.list = slices.Insert(m.list, m.cursor, task)
+				m.taskinput.Blur()
+				m.taskinput.Reset()
 			}
-
-		// move the task down
-		case "J":
-			if m.cursor < len(m.list)-1 {
-				m.list[m.cursor], m.list[m.cursor+1] = m.list[m.cursor+1], m.list[m.cursor]
-				m.cursor++
-			}
-
-		// move the task up
-		case "K":
-			if m.cursor > 0 {
-				m.list[m.cursor], m.list[m.cursor-1] = m.list[m.cursor-1], m.list[m.cursor]
-				m.cursor--
-			}
-
-		// bump the task level left
-		case "H":
-			m.list[m.cursor].level = 1
-
-		// bump the task level right
-		case "L":
-			m.list[m.cursor].level = 2
-
-		// toggle selection
-		case " ":
-			m.list[m.cursor].checked = !m.list[m.cursor].checked
 		}
 	}
 
-	return m, nil
+	m.taskinput, cmd = m.taskinput.Update(msg)
+	return m, cmd
 }
 
 func (m model) View() string {
@@ -134,6 +180,10 @@ func (m model) View() string {
 		Align(lipgloss.Right).
 		Width(m.width).
 		Render("term_tools :: master")
+
+	textInput := lipgloss.NewStyle().
+		Width(m.width).
+		Render(m.taskinput.View())
 
 	footer := lipgloss.NewStyle().
 		Background(tint.Bg()).
@@ -150,16 +200,20 @@ func (m model) View() string {
 	contentMargin := 2
 	content := lipgloss.NewStyle().
 		Width(m.width - contentMargin*2).
-		Height(m.height - lipgloss.Height(header) - lipgloss.Height(footer) - contentMargin*2).
+		Height(m.height - lipgloss.Height(header) - lipgloss.Height(textInput) - lipgloss.Height(footer) - contentMargin*2).
 		Align(lipgloss.Left).
 		Margin(2).
 		Render(inner)
 
-	return lipgloss.JoinVertical(lipgloss.Top, header, content, footer)
+	return lipgloss.JoinVertical(lipgloss.Top, header, content, footer, textInput)
 }
 
 func initialModel() model {
+	input := textinput.New()
+	input.Placeholder = "Task"
+
 	return model{
+		mode: normalMode,
 		list: []*listItem{
 			{checked: false, level: 1, task: "hello"},
 			{checked: false, level: 1, task: "two"},
@@ -168,7 +222,8 @@ func initialModel() model {
 			{checked: false, level: 2, task: "sub3"},
 			{checked: false, level: 1, task: "three kj asdlkfj a;sldkfj l;askdjf ljoiwer oiwuer oiwue roiwu eroiwu eroiuw eroiu weoriuw eroiuweori uwoeiru woeiruwoeiru owieru oiweurowieur"},
 		},
-		cursor: 0,
+		cursor:    0,
+		taskinput: input,
 	}
 }
 
