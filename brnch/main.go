@@ -84,7 +84,8 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	cmds := []tea.Cmd{}
+	stateChange := false
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -136,7 +137,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// focus task creation
 			case "i":
 				m.mode = insertMode
-				cmd = m.taskinput.Focus()
+				cmd := m.taskinput.Focus()
+				cmds = append(cmds, cmd)
+				stateChange = true
 
 			// delete
 			case "d":
@@ -169,8 +172,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	var cmd tea.Cmd
 	m.taskinput, cmd = m.taskinput.Update(msg)
-	return m, cmd
+	if stateChange {
+		m.taskinput.Reset()
+	}
+	cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
@@ -190,7 +199,7 @@ func (m model) View() string {
 		Foreground(tint.Fg()).
 		Align(lipgloss.Left).
 		Width(m.width).
-		Render("i: new task space: toggle  d: delete  HJKL: move task")
+		Render("i: new task  u: update task  space: toggle  d: delete  HJKL: move task")
 
 	inner := ""
 	for i, item := range m.list {
