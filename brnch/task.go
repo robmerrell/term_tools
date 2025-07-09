@@ -12,7 +12,6 @@ type Task struct {
 	Key     string `json:"key"`
 	Text    string `json:"text"`
 	Checked bool   `json:"checked"`
-	Order   int    `json:"order"`
 	// just store if this is a level 1 or level 2 task. Since we only allow 2 levels
 	// this is easier than having a list of subitem structs. Moving around fully grouped
 	// tasks is a little more work, but not significantly so.
@@ -20,25 +19,11 @@ type Task struct {
 }
 
 // create a new task
-func newTask(text string, order int) *Task {
-	return &Task{Text: text, Checked: false, Level: 1, Order: order}
+func newTask(text string) *Task {
+	return &Task{Text: text, Checked: false, Level: 1}
 }
 
 func (t *Task) render(m *model, selected bool) string {
-	// checkbox
-	check := "● "
-	color := tint.Blue()
-	if t.Checked {
-		check = "✓ "
-		color = tint.Green()
-	}
-	if t.Level == 2 {
-		check = "  " + check
-	}
-	checkOutput := lipgloss.NewStyle().
-		Foreground(color).
-		Render(check)
-
 	// task
 	taskColor := tint.Fg()
 	if t.Checked {
@@ -49,8 +34,7 @@ func (t *Task) render(m *model, selected bool) string {
 	}
 
 	task := lipgloss.NewStyle().
-		// TODO: readdress this sizing
-		Width(m.width - 10).
+		Width(m.width - 6).
 		Foreground(taskColor).
 		Strikethrough(t.Checked).
 		Render(t.Text)
@@ -58,5 +42,23 @@ func (t *Task) render(m *model, selected bool) string {
 	// indent for word wrapping
 	task = strings.ReplaceAll(task, "\n", "\n"+strings.Repeat(" ", t.Level*2))
 
-	return fmt.Sprintf("%s%s\n", checkOutput, task)
+	return fmt.Sprintf("%s%s\n", t.renderCheckbox(), task)
+}
+
+func (t *Task) renderCheckbox() string {
+	checkColor := tint.Blue()
+	checkChar := "●"
+	if t.Checked {
+		checkChar = "✓"
+		checkColor = tint.Green()
+	} else {
+		if t.Level == 1 {
+			checkChar = "●"
+		} else {
+			checkChar = "○"
+		}
+	}
+
+	text := fmt.Sprintf("%s%s ", strings.Repeat(" ", t.Level), checkChar)
+	return lipgloss.NewStyle().Foreground(checkColor).Render(text)
 }
