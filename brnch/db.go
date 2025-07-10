@@ -15,7 +15,6 @@ type DB struct {
 }
 
 func newDB(path, project, branch string) (*DB, error) {
-	// "/home/rob/.local/share/brnch"
 	// create the data dir
 	if err := os.MkdirAll(path, 0750); err != nil {
 		return nil, err

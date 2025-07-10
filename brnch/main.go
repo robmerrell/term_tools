@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -18,6 +19,7 @@ var db *DB
 var lastErr error
 
 // UI messages
+type tasksSavedMsg bool // doesn't matter the type the payload isn't needed
 type dbErrorMsg error
 type tasksMsg []*Task
 
@@ -95,6 +97,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor < len(m.tasks)-1 {
 					m.tasks[m.cursor], m.tasks[m.cursor+1] = m.tasks[m.cursor+1], m.tasks[m.cursor]
 					m.cursor++
+					cmds = append(cmds, m.saveTasksEvent())
 				}
 
 			// move the task up
@@ -102,15 +105,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor > 0 {
 					m.tasks[m.cursor], m.tasks[m.cursor-1] = m.tasks[m.cursor-1], m.tasks[m.cursor]
 					m.cursor--
+					cmds = append(cmds, m.saveTasksEvent())
 				}
 
 			// bump the task level left
 			case "H":
 				m.tasks[m.cursor].Level = 1
+				cmds = append(cmds, m.saveTasksEvent())
 
 			// bump the task level right
 			case "L":
 				m.tasks[m.cursor].Level = 2
+				cmds = append(cmds, m.saveTasksEvent())
 
 			// focus task creation
 			case "i":
@@ -126,11 +132,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.cursor > len(m.tasks)-1 {
 						m.cursor--
 					}
+					cmds = append(cmds, m.saveTasksEvent())
 				}
 
 			// toggle selection
 			case " ":
 				m.tasks[m.cursor].Checked = !m.tasks[m.cursor].Checked
+				cmds = append(cmds, m.saveTasksEvent())
 			}
 		} else {
 			switch msg.Type {
@@ -151,6 +159,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.taskinput.Blur()
 				m.taskinput.Reset()
+				cmds = append(cmds, m.saveTasksEvent())
 			}
 		}
 	}
@@ -212,9 +221,25 @@ func initialModel() model {
 	}
 }
 
+func (m *model) saveTasksEvent() tea.Cmd {
+	return func() tea.Msg {
+		if err := db.SaveTasks(m.tasks); err != nil {
+			return dbErrorMsg(err)
+		}
+
+		return tasksSavedMsg(true)
+	}
+
+}
+
 func main() {
-	var err error
-	db, err = newDB("", "term_tools", "master")
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	db, err = newDB(filepath.Join(homeDir, ".local", "share", "brnch"), "term_tools", "master")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
