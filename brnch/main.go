@@ -229,7 +229,6 @@ func (m *model) saveTasksEvent() tea.Cmd {
 
 		return tasksSavedMsg(true)
 	}
-
 }
 
 func main() {
@@ -239,7 +238,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err = newDB(filepath.Join(homeDir, ".local", "share", "brnch"), "term_tools", "master")
+	project, err := projectName()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	branch, err := branchName()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	db, err = newDB(filepath.Join(homeDir, ".local", "share", "brnch"), project, branch)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
