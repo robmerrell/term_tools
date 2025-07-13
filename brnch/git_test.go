@@ -11,7 +11,20 @@ func TestProjectName(t *testing.T) {
 	name, err := projectName()
 	assert.NoError(t, err)
 
-	assert.Equal(t, "brnch", name)
+	assert.Equal(t, "term_tools", name)
+}
+
+func TestProjectNameNoGit(t *testing.T) {
+	startingDir, err := os.Getwd()
+	assert.NoError(t, err)
+
+	dir := t.TempDir()
+
+	os.Chdir(dir)
+	defer os.Chdir(startingDir)
+
+	_, err = projectName()
+	assert.Error(t, err)
 }
 
 func TestBranchName(t *testing.T) {

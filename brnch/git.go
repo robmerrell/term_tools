@@ -15,7 +15,17 @@ func projectName() (string, error) {
 		return "", err
 	}
 
-	return filepath.Base(cwd), nil
+	repo, err := git.PlainOpenWithOptions(cwd, &git.PlainOpenOptions{DetectDotGit: true})
+	if err != nil {
+		return "", fmt.Errorf("failed to open repo: %w", err)
+	}
+
+	tree, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get work tree: %w", err)
+	}
+
+	return filepath.Base(tree.Filesystem.Root()), nil
 }
 
 func branchName() (string, error) {
