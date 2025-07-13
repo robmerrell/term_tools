@@ -58,7 +58,8 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds := []tea.Cmd{}
-	stateChange := false
+	toInsertState := false
+	toUpdateState := false
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -123,7 +124,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode = insertMode
 				cmd := m.taskinput.Focus()
 				cmds = append(cmds, cmd)
-				stateChange = true
+				toInsertState = true
+
+			// focus task update
+			case "u":
+				m.mode = updateMode
+				cmd := m.taskinput.Focus()
+				cmds = append(cmds, cmd)
+				toUpdateState = true
 
 			// delete
 			case "d":
@@ -140,7 +148,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.tasks[m.cursor].Checked = !m.tasks[m.cursor].Checked
 				cmds = append(cmds, m.saveTasksEvent())
 			}
-		} else {
+		} else if m.mode == insertMode {
 			switch msg.Type {
 			case tea.KeyEsc:
 				m.mode = normalMode
@@ -161,13 +169,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.taskinput.Reset()
 				cmds = append(cmds, m.saveTasksEvent())
 			}
+		} else {
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.mode = normalMode
+				m.taskinput.Blur()
+				m.taskinput.Reset()
+
+			case tea.KeyEnter:
+				m.mode = normalMode
+				m.tasks[m.cursor].Text = m.taskinput.Value()
+				m.taskinput.Blur()
+				m.taskinput.Reset()
+				cmds = append(cmds, m.saveTasksEvent())
+			}
 		}
 	}
 
 	var cmd tea.Cmd
 	m.taskinput, cmd = m.taskinput.Update(msg)
-	if stateChange {
+	if toInsertState {
 		m.taskinput.Reset()
+	}
+	if toUpdateState {
+		m.taskinput.SetValue(m.tasks[m.cursor].Text)
+		m.taskinput.CursorEnd()
 	}
 	cmds = append(cmds, cmd)
 
